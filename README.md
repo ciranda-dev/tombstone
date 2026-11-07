@@ -115,9 +115,10 @@ Each choice follows what the established implementations do:
 
 ## Security
 
-What the package promises, on every honest peer: once a tombstone counts, the entry's secret is
-gone from memory and from the key file, the blocks your app clears leave the database's files,
-and nothing can open the box left in the logs.
+On every honest peer that drops an entry's secret once its tombstone counts, clears what it held
+and lets `Reclaim` run, as the example does: the secret is gone from memory and from the key file,
+nothing can open the box left in the logs, and the cleared blocks leave the database's files once
+no snapshot sees them and the disk has room for the compaction.
 
 What it can't do:
 
