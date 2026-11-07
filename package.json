@@ -1,6 +1,6 @@
 {
   "name": "@ciranda/tombstone",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Delete in a replicated, append-only log: a secret per entry, dropped on delete; tombstones every peer applies alike; the bytes given back to the disk; and a screen without a column of \"Message deleted\"",
   "keywords": [
     "delete",
@@ -25,6 +25,7 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
+    "./rows": "./rows.js",
     "./package.json": "./package.json"
   },
   "imports": {
@@ -43,6 +44,7 @@
   },
   "files": [
     "index.js",
+    "rows.js",
     "LICENSE",
     "NOTICE",
     "README.md"

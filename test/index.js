@@ -309,3 +309,8 @@ test('rows: live entries, markers where something points, and one row per purge 
   t.alike(tombstone.rows([gone('1', 1)], { group: () => undefined }), [], 'no group, no row')
   t.alike(tombstone.rows([]), [])
 })
+
+test('rows is its own module, with no dependencies', (t) => {
+  t.is(require('../rows'), tombstone.rows)
+  t.alike(require('../package.json').exports['./rows'], './rows.js')
+})

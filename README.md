@@ -239,6 +239,9 @@ What a screen shows of `entries`, given in the order they were written:
 
 Any other deleted entry shows nothing.
 
+It is also `require('@ciranda/tombstone/rows')`, with no dependencies, for a screen whose bundler
+has no Node builtins, such as React Native.
+
 #### Constants
 
 `DELETE`, `WAIT`, `IGNORE`, `MAX_WAITING`.
