@@ -161,6 +161,9 @@ The secrets of a log's entries on this device: id to secret, in a JSON file of i
 - `await keys.drop(ids[, { done }])`: zeroes and forgets their secrets, here and in the file.
   `done: true` marks them shredded for good. Drop first, clear what the entries held, then drop
   again with `done`, so a crash in between finishes at the next start.
+- `await keys.save()`: writes the file again, whole, with what `keys.toJSON()` says. A subclass
+  that keeps more for each id overrides `toJSON()`, `load()` (which resolves with the parsed file),
+  `_keep(id, secret)` and `_forget(id)`, and calls `save()`.
 - `await keys.close()`.
 
 #### `file = new WholeFile(path, data)`

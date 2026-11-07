@@ -134,7 +134,7 @@ class KeyStore {
       return Promise.resolve(false)
     }
     this._keep(id, b4a.from(secret))
-    return this._saver.save().then(() => true)
+    return this.save().then(() => true)
   }
 
   // Zeroes and forgets their secrets, here and on disk. done: shredded for good
@@ -143,6 +143,11 @@ class KeyStore {
       this._forget(id)
       if (done) this.shredded.add(id)
     }
+    return this.save()
+  }
+
+  // Writes the file again, whole, with what toJSON() says
+  save() {
     return this._saver.save()
   }
 

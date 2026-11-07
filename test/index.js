@@ -122,6 +122,50 @@ test('KeyStore: a file of its own, the first secret stays, a drop zeroes and for
   }
 })
 
+test('KeyStore: a subclass keeps more of each id in the same file', async (t) => {
+  class Notes extends tombstone.KeyStore {
+    constructor(file) {
+      super(file)
+      this.notes = new Map()
+    }
+
+    async load() {
+      const saved = await super.load()
+      for (const [id, note] of Object.entries(saved?.notes || {})) this.notes.set(id, note)
+      return saved
+    }
+
+    note(id, text) {
+      this.notes.set(id, text)
+      return this.save()
+    }
+
+    _forget(id) {
+      super._forget(id)
+      this.notes.delete(id)
+    }
+
+    toJSON() {
+      return { ...super.toJSON(), notes: Object.fromEntries(this.notes) }
+    }
+  }
+  const file = path.join(await t.tmp(), 'keys.json')
+  const keys = new Notes(file)
+  await keys.load()
+  await keys.set('one', tombstone.secret())
+  await keys.note('one', 'kept')
+  const again = new Notes(file)
+  await again.load()
+  t.is(again.notes.get('one'), 'kept')
+  await again.drop(['one'], { done: true })
+  t.alike(JSON.parse(fs.readFileSync(file, 'utf8')), {
+    v: 1,
+    keys: {},
+    shredded: ['one'],
+    notes: {}
+  })
+})
+
 test('KeyStore: without a file, in memory only', async (t) => {
   const keys = new tombstone.KeyStore()
   t.is(await keys.load(), null)
