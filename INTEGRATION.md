@@ -13,17 +13,18 @@ deleted message, in the same room.
 Every message view of a deleted message (`messages`, `messages-changed`, `getOlder`), as before:
 `{ id, text: '', at, from, mine, verified, deleted: true, thread? }`, and now also:
 
-| Field       | Always | What it is                                                                                                                                                                                        |
-| ----------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deletedBy` | yes    | The identity (hex) that deleted it: its author, the room's owner, an admin or a moderator. A name through the members list, as `from` is.                                                         |
-| `purge`     | no     | Only when a purge of its author's messages took it (a mute, 16bb): a string, the same for every message that purge took (`'<signer hex>/<at>'`). Use it as an opaque key; never parse or show it. |
+| Field       | Always | What it is                                                                                                                                                                  |
+| ----------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deletedBy` | yes    | The identity (hex) that deleted it: its author, the room's owner, an admin or a moderator. A name through the members list, as `from` is.                                   |
+| `purge`     | no     | Only when a purge of its author's messages took it (a mute, 16bb): a string, the same for every message that purge took. An opaque key: compare it, never parse or show it. |
+| `purgedAt`  | no     | With `purge`: when that purge was made, ms since the epoch (the purge record's own `at`), the same for every message it took. The time a purge's line shows.                |
 
 `from` is still whose message it was. `capy-worker/lib/tombstone` exports `rows`, the function
 below, for the apps' tests.
 
 One limit, said here so no text claims more: a purge that a later purge of the same person
 replaced (unmuted, then muted again) is not in the room's view any more, so its messages come
-without `purge` and show nothing, like any message deleted on its own.
+without `purge` or `purgedAt` and show nothing, like any message deleted on its own.
 
 ## The rule: `rows(entries, { pointed, group })`
 
@@ -42,11 +43,11 @@ capy-worker's `workers/lib/tombstone.js` (`// What a screen shows`). Its tests a
 
 It returns, in order:
 
-| Row                               | What the window draws                                                                                                                                                                   |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `{ type: 'entry', entry }`        | The message, as today.                                                                                                                                                                  |
-| `{ type: 'deleted', entry }`      | Today's small "Message deleted" (`bubble__gone`), so the reply's quote, the thread line or the pin still has its place.                                                                 |
-| `{ type: 'run', group, entries }` | One line for the messages of one purge that are next to each other on screen: `nameOf(room, entries[0].deletedBy)` deleted `entries.length` of `authorOf(room, entries[0])`'s messages. |
+| Row                               | What the window draws                                                                                                                                                                                                   |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ type: 'entry', entry }`        | The message, as today.                                                                                                                                                                                                  |
+| `{ type: 'deleted', entry }`      | Today's small "Message deleted" (`bubble__gone`), so the reply's quote, the thread line or the pin still has its place.                                                                                                 |
+| `{ type: 'run', group, entries }` | One line for the messages of one purge that are next to each other on screen: `nameOf(room, entries[0].deletedBy)` deleted `entries.length` of `authorOf(room, entries[0])`'s messages · `timeOf(entries[0].purgedAt)`. |
 
 Every other deleted message is not drawn. A hidden one doesn't break a run; a message, a marker or
 a line does, so one purge can be two lines when someone wrote in between. Say only what the run
@@ -70,8 +71,9 @@ is:
      draws today (`bubble()` already sends a deleted one to `goneBubble`). A `run` row is a line
      like the `left` divider (`li.joined-divider`, `role: 'separator'`), with
      `dataset: { id: entries[0].id }`, and it ends the bubble group (`group = null`);
-   - what the loop reads off a message for a `run` (the day, the call cards, "You joined", the
-     time) comes from `entries[0]`;
+   - where a `run` sits (the day, the call cards, "You joined") comes from `entries[0].at`, like
+     any message; the time its line shows is `purgedAt`, when the purge was made, not when the
+     messages were written;
    - "NEW MESSAGES" today waits for `message.id === room.newFrom`; when that message is one of the
      hidden ones it never shows. Put it before the first row whose id is `>= room.newFrom` (ids sort
      by time), once.
