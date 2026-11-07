@@ -88,15 +88,16 @@ test('any order of the same ops ends the same', { timeout: 120_000 }, async (t) 
   for (const op of OPS) await host.apply(op)
   const shown = tombstone.rows(host.state(), {
     pointed: (entry) => entry.id === 'b2', // a reply quotes it
-    group: (entry) => entry.deleted.group
+    group: ({ deleted }) => deleted.group && { id: deleted.group, at: 100 },
+    time: () => 0 // every entry written before the purge
   })
   t.alike(
-    shown.map((row) => [row.type, ...(row.entries || [row.entry]).map((e) => e.id)]),
+    shown.map((row) => [row.type, row.entry.id, row.count]),
     [
-      ['run', 'b1'],
-      ['deleted', 'b2']
+      ['deleted', 'b2', undefined],
+      ['purge', 'b1', 2]
     ],
-    'the purge is one line, the one quoted a marker, the rest nothing'
+    'the purge is one row, the one quoted a marker, the rest nothing'
   )
 })
 

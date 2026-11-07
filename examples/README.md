@@ -16,11 +16,11 @@ its own, sealed under another key of the same secret. `apply` takes:
 - a delete through `tombstone.decide()`, allowed for the message's author and the moderator. One
   that comes before its message waits, and `tombstone.settle()` checks it when the message comes;
 - a purge only from the moderator: a tombstone for each of the target's messages the view holds,
-  all with the purge's id as their group.
+  all with the purge's id as their group and its time.
 
 After apply, each device drops the secrets of the deleted messages, clears the attachments it
 holds and lets its `Reclaim` compact the store. `tombstone.rows()` gives the screen, with a
-message a reply quotes as a marker and a purge's messages in a row as one line.
+message a reply quotes as a marker and a purge as one line at its time, wherever its messages were.
 
 ```sh
 npm install
@@ -45,12 +45,11 @@ ana deletes her own message, and purges bruno: one record for all of his
 
 what the room shows now, the same on 3 of 3 peers
   cris: Hello!
-  ana deleted 1 of bruno's messages
   Message deleted
   cris: is this a bot? (replying to a deleted message)
-  ana deleted 2 of bruno's messages
+  ana deleted 4 of bruno's messages
 
-"Buy now" is still in every log, sealed: e682194b2c9bbf8c30a9ab9c…
+"Buy now" is still in every log, sealed: a5d06c3b59f722478bb93544…
 its secret is on 0 of 3 peers
 bruno's file: 2.0 MB cleared, 2.3 MB back on the disk
 ```

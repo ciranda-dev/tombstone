@@ -47,12 +47,12 @@ async function applyWriter(by, { key, name }, view, host) {
   await view.put('writers/' + key, { name })
 }
 
-async function applyMessage(by, { id, box, reply = null, file = null }, view, host) {
-  if (!isId(id) || !isBox(box) || (reply !== null && !isId(reply))) return
+async function applyMessage(by, { id, at, box, reply = null, file = null }, view, host) {
+  if (!isId(id) || !isTime(at) || !isBox(box) || (reply !== null && !isId(reply))) return
   if (file !== null && !isKey(file)) return
   // the first copy wins, and a deleted entry stays deleted
   if (await view.get('entries/' + id)) return
-  const entry = { id, author: by, box, reply, file, deleted: null }
+  const entry = { id, at, author: by, box, reply, file, deleted: null }
   await view.put('entries/' + id, entry)
   const waiting = (await view.get('waiting/' + id))?.value || []
   if (waiting.length === 0) return
@@ -75,12 +75,12 @@ async function applyDelete(record, view, host) {
 }
 
 // The moderator deletes every entry of `target` the view holds, as one group
-async function applyPurge(by, length, { target }, view, host) {
-  if (by !== hex(host.key) || !isKey(target)) return
+async function applyPurge(by, length, { target, at }, view, host) {
+  if (by !== hex(host.key) || !isKey(target) || !isTime(at)) return
   const group = by + '/' + length
   for (const entry of await entriesOf(view)) {
     if (entry.author !== target) continue
-    const record = { id: entry.id, by, group }
+    const record = { id: entry.id, by, group, at }
     const verdict = await tombstone.decide(record, entry, allowed(host))
     if (verdict === tombstone.DELETE) await markDeleted(view, entry, record)
   }
@@ -91,8 +91,8 @@ function allowed(host) {
   return (record, entry) => record.by === entry.author || record.by === hex(host.key)
 }
 
-function markDeleted(view, entry, { by, group = null }) {
-  return view.put('entries/' + entry.id, { ...entry, deleted: { by, group } })
+function markDeleted(view, entry, { by, group = null, at = null }) {
+  return view.put('entries/' + entry.id, { ...entry, deleted: { by, group, at } })
 }
 
 async function waitingCount(view) {
@@ -128,6 +128,7 @@ async function say(room, person, text, { reply = null, file = null } = {}) {
   await person.base.append({
     type: 'message',
     id,
+    at: Date.now(),
     box: hex(box),
     reply,
     file: core && hex(core.key)
@@ -140,7 +141,7 @@ function remove(person, id) {
 }
 
 function purge(person, target) {
-  return person.base.append({ type: 'purge', target: hex(target.base.local.key) })
+  return person.base.append({ type: 'purge', target: hex(target.base.local.key), at: Date.now() })
 }
 
 // After apply, outside it: every deleted entry's secret goes, then what it held is cleared
@@ -174,7 +175,7 @@ async function screenOf(person) {
   const replied = new Set(entries.filter((e) => !e.deleted && e.reply).map((e) => e.reply))
   return tombstone.rows(entries, {
     pointed: (entry) => replied.has(entry.id),
-    group: (entry) => entry.deleted.group
+    group: ({ deleted }) => deleted.group && { id: deleted.group, at: deleted.at }
   })
 }
 
@@ -185,11 +186,9 @@ async function linesOf(room, person) {
   for (const row of await screenOf(person)) {
     if (row.type === 'deleted') {
       lines.push('Message deleted')
-    } else if (row.type === 'run') {
-      const { by } = row.entries[0].deleted
-      const n = row.entries.length
-      const whose = names.get(row.entries[0].author)
-      lines.push(`${names.get(by)} deleted ${n} of ${whose}'s messages`)
+    } else if (row.type === 'purge') {
+      const { deleted, author } = row.entry
+      lines.push(`${names.get(deleted.by)} deleted ${row.count} of ${names.get(author)}'s messages`)
     } else {
       const { entry } = row
       let line = `${names.get(entry.author)}: ${textOf(person, entry)}`
@@ -330,6 +329,10 @@ function isKey(key) {
 
 function isBox(box) {
   return typeof box === 'string' && /^([0-9a-f]{2}){28,4096}$/.test(box)
+}
+
+function isTime(at) {
+  return Number.isSafeInteger(at) && at >= 0
 }
 
 function isName(name) {

@@ -25,7 +25,7 @@ by [Ciranda](https://ciranda.dev).
 - One rule for tombstones that ends the same on every peer, whatever order things arrive in.
 - Cleared blocks taken off the disk by compacting Corestore's storage, with what a snapshot keeps
   asked for again.
-- What a screen shows: no column of "Message deleted", and a purge as one line.
+- What a screen shows: no column of "Message deleted", and a purge as one line at its time.
 - Works in Node and Bare.
 
 ## Install
@@ -55,22 +55,26 @@ tombstone.open(box, tombstone.keyOf(keys.get(id), 'chat/text'), id) // <Buffer 6
 await keys.drop([id], { done: true })
 keys.get(id) // null
 
-// What the screen shows
+// What the screen shows. Ana deleted her own message, then purged Bruno's at 50
+const purge = { id: 'p1', at: 50 }
 const entries = [
-  { id: '0001-ana', deleted: { by: 'ana' } },
-  { id: '0002-bruno', deleted: { by: 'ana', purge: 'p1' } },
-  { id: '0003-bruno', deleted: { by: 'ana', purge: 'p1' } },
-  { id: '0004-cris', deleted: null, reply: '0002-bruno' }
+  { id: '0001-ana', at: 10, deleted: { by: 'ana' } },
+  { id: '0002-bruno', at: 20, deleted: { by: 'ana', purge } },
+  { id: '0003-cris', at: 30, deleted: null, reply: '0002-bruno' },
+  { id: '0004-bruno', at: 40, deleted: { by: 'ana', purge } },
+  { id: '0005-cris', at: 60, deleted: null }
 ]
 tombstone.rows(entries, {
   pointed: (entry) => entry.id === '0002-bruno', // the reply quotes it
   group: (entry) => entry.deleted.purge
 })
 // [
-//   { type: 'deleted', entry: <0002-bruno> },              a small "Message deleted"
-//   { type: 'run', group: 'p1', entries: [<0003-bruno>] }, "ana deleted 1 of bruno's messages"
-//   { type: 'entry', entry: <0004-cris> }
-// ]                                                        and 0001-ana shows nothing
+//   { type: 'deleted', entry: <0002-bruno> },   a small "Message deleted"
+//   { type: 'entry', entry: <0003-cris> },
+//   { type: 'purge', group: 'p1', count: 2, at: 50, entry: <0002-bruno> },
+//                                               "ana deleted 2 of bruno's messages", at 50
+//   { type: 'entry', entry: <0005-cris> }
+// ]                                             and 0001-ana and 0004-bruno show nothing
 ```
 
 How a view applies tombstones is under [Autobase apps](#autobase-apps), and how the disk gets
@@ -111,7 +115,9 @@ Each choice follows what the established implementations do:
   the live data. No compaction drops what a database snapshot sees, so what didn't come back is
   asked again up to 12 times, then kept for the next start.
 - **The screen** keeps a marker only where something points at the deleted entry, as Slack keeps
-  "This message was deleted." only for a message with thread replies. The rest disappear.
+  "This message was deleted." only for a message with thread replies. The rest disappear, and a
+  purge is one line at the moment it was made, as a chat says who joined or left, however many
+  messages it took and wherever they were.
 
 ## Security
 
@@ -218,16 +224,18 @@ hands rocksdb-native's `compactRange` options through, and rocksdb-native's `get
 database. None of the three READMEs documents them yet; `test/reclaim.js` fails the day a version
 stops giving the disk back.
 
-#### `rows(entries[, { pointed, group }])`
+#### `rows(entries[, { pointed, group, time }])`
 
-What a screen shows of `entries`, in their order:
+What a screen shows of `entries`, given in the order they were written:
 
 - `{ type: 'entry', entry }` for each live one;
 - `{ type: 'deleted', entry }`, a marker, for a deleted one `pointed(entry)` says something points
   at (a reply that quotes it, a thread under it, a pin);
-- `{ type: 'run', group, entries }`, one line, for deleted ones in a row with the same
-  `group(entry)`: the ones one delete took together, such as a purge. Hidden entries don't break a
-  run; a live entry or a marker does.
+- `{ type: 'purge', group, count, at, entry }`, one for each group: `group(entry)` returns
+  `{ id, at }` for a deleted entry that one delete took with others, such as a purge, its id and
+  when it was made, or `null`. `count` is how many entries of the list it took, its markers
+  included, and `entry` the first of them. It stands before the first row written after `at`, by
+  `time(entry)` (default `entry.at`).
 
 Any other deleted entry shows nothing.
 

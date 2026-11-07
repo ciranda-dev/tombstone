@@ -260,53 +260,52 @@ test('settle: the first tombstone allowed counts, and the rest are not asked', a
   t.is(await tombstone.settle(entry, [], allowed), null)
 })
 
-test('rows: live entries, markers where something points, runs of one group as one line', (t) => {
-  const live = (id) => ({ id, deleted: null })
-  const gone = (id, group = null) => ({ id, deleted: { group } })
+test('rows: live entries, markers where something points, and one row per purge at its time', (t) => {
+  const live = (id, at) => ({ id, at, deleted: null })
+  const gone = (id, at, purge = null) => ({ id, at, deleted: { purge } })
+  const purges = { p: 25, q: 5, r: 50 }
   const entries = [
-    live('1'),
-    gone('2'), // nothing points at it, no group: nothing
-    gone('3', 'p'),
-    gone('4', 'p'),
-    gone('5'), // hidden: it doesn't break the run
-    gone('6', 'p'),
-    gone('7', 'q'),
-    gone('8', 'p'),
-    gone('9', 'p'), // pointed at
-    gone('10', 'p'),
-    live('11'),
-    gone('12', 'p'),
-    gone('13')
+    live('1', 10),
+    gone('2', 11), // no purge, nothing points at it: nothing
+    gone('3', 12, 'p'),
+    live('4', 20),
+    gone('5', 21, 'p'), // pointed at: a marker, and still one of p's
+    gone('6', 22, 'q'),
+    live('7', 30),
+    gone('8', 31, 'p'),
+    gone('9', 32), // pointed at
+    live('10', 50), // as old as r: r comes after it
+    gone('11', 51, 'r')
   ]
-  const pointed = (entry) => entry.id === '9' || entry.id === '13'
-  const group = (entry) => entry.deleted.group
-  const shown = tombstone
-    .rows(entries, { pointed, group })
-    .map((row) =>
-      row.type === 'run'
-        ? ['run', row.group, row.entries.map((e) => e.id)]
+  const pointed = (entry) => entry.id === '5' || entry.id === '9'
+  const group = ({ deleted }) => deleted.purge && { id: deleted.purge, at: purges[deleted.purge] }
+  const shown = tombstone.rows(entries, { pointed, group })
+  t.alike(
+    shown.map((row) =>
+      row.type === 'purge'
+        ? ['purge', row.group, row.count, row.at, row.entry.id]
         : [row.type, row.entry.id]
-    )
-  t.alike(shown, [
-    ['entry', '1'],
-    ['run', 'p', ['3', '4', '6']],
-    ['run', 'q', ['7']],
-    ['run', 'p', ['8']],
-    ['deleted', '9'],
-    ['run', 'p', ['10']],
-    ['entry', '11'],
-    ['run', 'p', ['12']],
-    ['deleted', '13']
-  ])
+    ),
+    [
+      ['purge', 'q', 1, 5, '6'],
+      ['entry', '1'],
+      ['entry', '4'],
+      ['deleted', '5'],
+      ['purge', 'p', 3, 25, '3'],
+      ['entry', '7'],
+      ['deleted', '9'],
+      ['entry', '10'],
+      ['purge', 'r', 1, 50, '11']
+    ],
+    'wherever its entries were, a purge is one row, before the first row written after it'
+  )
+  const later = tombstone.rows(entries, { pointed, group, time: (entry) => entry.at - 10 })
+  t.is(later[0].type, 'entry', 'time: when an entry was written, for where a purge stands')
   t.alike(
     tombstone.rows(entries).map((row) => row.entry.id),
-    ['1', '11'],
+    ['1', '4', '7', '10'],
     'by default every deleted entry disappears'
   )
-  t.alike(
-    tombstone.rows([gone('1', undefined)], { group }),
-    [],
-    'a group that is undefined is none'
-  )
+  t.alike(tombstone.rows([gone('1', 1)], { group: () => undefined }), [], 'no group, no row')
   t.alike(tombstone.rows([]), [])
 })

@@ -37,10 +37,9 @@ test('the example: a refused delete, a delete, a purge, and what the screen keep
   t.ok(output.includes('the same on 3 of 3 peers'))
   t.alike(screens[0], [
     'cris: Hello!',
-    "ana deleted 1 of bruno's messages",
     'Message deleted',
     'cris: is this a bot? (replying to a deleted message)',
-    "ana deleted 2 of bruno's messages"
+    "ana deleted 4 of bruno's messages"
   ])
   t.alike(screens[1], screens[0])
   t.alike(screens[2], screens[0])
@@ -87,7 +86,8 @@ test('the same screen on every peer, whatever order the writers replicate in', a
     t.alike(result, [
       'ana: Hi',
       'Message deleted',
-      'cris: is this a bot? (replying to a deleted message)'
+      'cris: is this a bot? (replying to a deleted message)',
+      "ana deleted 1 of bruno's messages"
     ])
   }
 })
@@ -109,7 +109,8 @@ test('a tombstone that comes before its entry waits, and counts only if allowed'
     t.is((await entryOn(person, early)).deleted, null, "cris's never counts")
     t.alike((await entryOn(person, later)).deleted, {
       by: b4a.toString(ana.base.local.key, 'hex'),
-      group: null
+      group: null,
+      at: null
     })
     t.is((await person.base.view.get('count/waiting')).value, 0)
     t.absent(await person.base.view.get('waiting/' + later))
@@ -122,19 +123,20 @@ test('the first copy of an id wins, and a late copy never brings a deleted entry
   const hi = await say(at, ana, 'Hi')
   await at.sync()
   const first = await entryOn(cris, hi)
-  await cris.base.append({ type: 'message', id: hi, box: 'ab'.repeat(40) }) // cris reuses it
+  await cris.base.append({ type: 'message', id: hi, at: 1, box: 'ab'.repeat(40) }) // cris reuses it
   await at.sync()
   t.alike(await entryOn(bruno, hi), first, 'the first copy stays')
 
   await remove(ana, hi)
   await at.sync()
-  await bruno.base.append({ type: 'message', id: hi, box: first.box }) // the same, again
+  await bruno.base.append({ type: 'message', id: hi, at: first.at, box: first.box }) // again
   await remove(ana, hi) // a second tombstone
   await at.sync()
   for (const person of at.people) {
     t.alike((await entryOn(person, hi)).deleted, {
       by: b4a.toString(ana.base.local.key, 'hex'),
-      group: null
+      group: null,
+      at: null
     })
   }
   for (const person of at.people) await shred(person)
@@ -164,19 +166,24 @@ test('what apply skips', async (t) => {
   const [ana, bruno] = at.people
   await bruno.base.append({ type: 'writer', key: 'ab'.repeat(32), name: 'eve' }) // not the creator
   await ana.base.append({ type: 'writer', key: 'nope', name: 'eve' })
+  const box = 'ab'.repeat(40)
   for (const value of [
     null,
     'text',
-    { type: 'message', id: 'Not An Id', box: 'ab'.repeat(40) },
-    { type: 'message', id: 'x', box: 'zz' },
-    { type: 'message', id: 'x', box: 'ab'.repeat(40), reply: 'Not An Id' },
-    { type: 'message', id: 'x', box: 'ab'.repeat(40), file: 'nope' },
+    { type: 'message', id: 'Not An Id', at: 1, box },
+    { type: 'message', id: 'x', box },
+    { type: 'message', id: 'x', at: -1, box },
+    { type: 'message', id: 'x', at: 1, box: 'zz' },
+    { type: 'message', id: 'x', at: 1, box, reply: 'Not An Id' },
+    { type: 'message', id: 'x', at: 1, box, file: 'nope' },
     { type: 'delete', id: 'Not An Id' },
-    { type: 'purge', target: 'nope' },
+    { type: 'purge', target: 'ab'.repeat(32), at: 1 }, // not the moderator
     { type: 'unknown' }
   ]) {
     await bruno.base.append(value)
   }
+  await ana.base.append({ type: 'purge', target: 'nope', at: 1 })
+  await ana.base.append({ type: 'purge', target: 'ab'.repeat(32) }) // no time
   await at.sync()
   t.alike(await entriesOf(ana.base.view), [])
   t.absent(await ana.base.view.get('writers/' + 'ab'.repeat(32)))
