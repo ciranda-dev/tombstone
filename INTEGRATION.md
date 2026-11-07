@@ -1,7 +1,7 @@
 # Capy: drawing deleted messages with `rows()`
 
 What the desktop (`capy`) and the phone (`capy-mobile`) call and read so that a deleted message
-shows nothing unless something points at it, and a purge shows as one line. The design comes
+shows nothing unless something points at it, and a purge shows as one line at its time. The design comes
 first (Fable): this says what the data is and where it goes, not how it looks.
 
 Nothing changes between peers. The tombstone stays in the log, every device still drops the
@@ -26,9 +26,9 @@ One limit, said here so no text claims more: a purge that a later purge of the s
 replaced (unmuted, then muted again) is not in the room's view any more, so its messages come
 without `purge` or `purgedAt` and show nothing, like any message deleted on its own.
 
-## The rule: `rows(entries, { pointed, group })`
+## The rule: `rows(entries, { pointed, group, time })`
 
-Pure, no imports: `rows()` and its two one-line defaults `no()` and `none()` at the end of
+Pure, no imports: `rows()` and its one-line defaults `no()`, `none()` and `atOf()` at the end of
 capy-worker's `workers/lib/tombstone.js` (`// What a screen shows`). Its tests are in capy-worker's
 `test/tombstone.js` (`rows: live entries, markers where something points, …`).
 
@@ -39,47 +39,50 @@ capy-worker's `workers/lib/tombstone.js` (`// What a screen shows`). Its tests a
   - a thread: `threadsOf(room).has(message.id)` (it counts only replies that aren't deleted);
   - a pin: `room.pins` has its id. The worker's `getPins` already leaves deleted messages out, so
     today this adds nothing; it stays in so a pin can never lose its place.
-- `group(message)`: `message.purge`.
+- `group(message)`: `message.purge ? { id: message.purge, at: message.purgedAt } : null`.
+- `time`: leave the default, `message.at`, the time every message view has.
 
-It returns, in order:
+It returns, in the order to draw them:
 
-| Row                               | What the window draws                                                                                                                                                                                                   |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `{ type: 'entry', entry }`        | The message, as today.                                                                                                                                                                                                  |
-| `{ type: 'deleted', entry }`      | Today's small "Message deleted" (`bubble__gone`), so the reply's quote, the thread line or the pin still has its place.                                                                                                 |
-| `{ type: 'run', group, entries }` | One line for the messages of one purge that are next to each other on screen: `nameOf(room, entries[0].deletedBy)` deleted `entries.length` of `authorOf(room, entries[0])`'s messages · `timeOf(entries[0].purgedAt)`. |
+| Row                                          | What the window draws                                                                                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ type: 'entry', entry }`                   | The message, as today.                                                                                                                                                                           |
+| `{ type: 'deleted', entry }`                 | Today's small "Message deleted" (`bubble__gone`), so the reply's quote, the thread line or the pin still has its place.                                                                          |
+| `{ type: 'purge', group, count, at, entry }` | One line for each purge, wherever its messages were: `nameOf(room, entry.deletedBy)` deleted `count` of `authorOf(room, entry)`'s messages · `timeOf(at)`. It stands at `at`, like "You joined". |
 
-Every other deleted message is not drawn. A hidden one doesn't break a run; a message, a marker or
-a line does, so one purge can be two lines when someone wrote in between. Say only what the run
-holds: "Ana deleted 3 of Bruno's messages" is true of that line, "all of Bruno's messages" is not.
-The count needs plural forms (`{count}`, and Arabic's six).
+Every other deleted message is not drawn, a message someone deleted on their own included. `entry`
+of a purge row is the first message it took in the list, there for whose messages they were and
+who purged them. `count` is how many messages of the list the purge took, the ones that still show
+as a marker included: the list is what the window has loaded, so the line says what it holds
+("Ana deleted 3 of Bruno's messages"), never "all", and it grows as older pages load. A purge none
+of whose messages are in the list has no row. The count needs plural forms (`{count}`, and
+Arabic's six).
 
 ## Desktop (`capy`)
 
 The renderer is ES modules with no bundler, so the function is copied, as `renderer/js/limits.js`
 is:
 
-1. `renderer/js/tombstones.js`: `export function rows` with `no` and `none`, copied from
+1. `renderer/js/tombstones.js`: `export function rows` with `no`, `none` and `atOf`, copied from
    `workers/lib/tombstone.js` as they are, nothing else.
 2. A test in `test/` that evaluates it as `test/limits.js` does and checks that it gives what
    `require('capy-worker/lib/tombstone').rows` gives on the same entries (the cases of capy-worker's
    rows test), so a change on one side fails there.
 3. `renderer/js/views/chat/messages.js`, `rows()`:
-   - compute `threads` before the loop, then
-     `const kept = rows(shown, { pointed, group: (m) => m.purge })`, with `pointed` as above;
+   - compute `threads` before the loop, then `const kept = rows(shown, { pointed, group })`, with
+     `pointed` and `group` as above;
    - loop over `kept` instead of `shown`. An `entry` or a `deleted` row is the message the loop
-     draws today (`bubble()` already sends a deleted one to `goneBubble`). A `run` row is a line
+     draws today (`bubble()` already sends a deleted one to `goneBubble`). A `purge` row is a line
      like the `left` divider (`li.joined-divider`, `role: 'separator'`), with
-     `dataset: { id: entries[0].id }`, and it ends the bubble group (`group = null`);
-   - where a `run` sits (the day, the call cards, "You joined") comes from `entries[0].at`, like
-     any message; the time its line shows is `purgedAt`, when the purge was made, not when the
-     messages were written;
-   - "NEW MESSAGES" today waits for `message.id === room.newFrom`; when that message is one of the
-     hidden ones it never shows. Put it before the first row whose id is `>= room.newFrom` (ids sort
-     by time), once.
+     `dataset: { purge: group }`, and it ends the bubble group (`group = null`);
+   - what the loop reads off a message for where a row sits (the day, the call cards, "You
+     joined") is `at` for a `purge` row and `entry.at` for the others;
+   - "NEW MESSAGES" today waits for `message.id === room.newFrom`; when that message is a hidden
+     one it never shows. Put it before the first `entry` or `deleted` row whose id is
+     `>= room.newFrom` (ids sort by time), once.
 4. A jump to a message that is now hidden (an old notification, a search hit from before the
-   purge) lands on nothing: fall back to the row that holds it (the run's line, by its entries) or
-   the next one.
+   purge) lands on nothing: go to its purge's line (the row whose `group` is its `purge`), or for
+   a message deleted on its own, to the row after where it was.
 5. The thread panel (`views/chat/thread.js`) lists a thread's replies, deleted ones included: run
    the same `rows()` over them, the first message always shown.
 
@@ -90,10 +93,10 @@ is:
    `capy-worker/lib/tombstone`'s `rows` on the same cases.
 2. `src/screens/chat/parts/MessageList.tsx`, `rowsOf(room, extra)`: the same steps as the desktop's.
    It needs `threadsOf(room)` (`src/store/rooms.ts`; the component computes it at `useMemo`, so call
-   it in `rowsOf` or pass it in). A `run` is
-   `items.push({ kind: 'line', key: 'purge-' + entries[0].id, text })` after `closeGroup()`; a
-   `deleted` row is the `message` row it is today (`Bubble.tsx` draws "Message deleted"). The
-   `room.newFrom` divider moves the same way.
+   it in `rowsOf` or pass it in). A `purge` row is
+   `items.push({ kind: 'line', key: 'purge-' + group, text })` after `closeGroup()`, its day and
+   call cards read from `at`; a `deleted` row is the `message` row it is today (`Bubble.tsx` draws
+   "Message deleted"). The `room.newFrom` divider moves the same way.
 3. `src/screens/chat/ThreadScreen.tsx` shows a thread's deleted replies too: the same `rows()` there.
 4. The room list's preview (`src/store/rooms.ts` and `words.ts`, "Message deleted") is the newest
    message's; leave it, or let the design say what a room whose newest message was deleted shows.
