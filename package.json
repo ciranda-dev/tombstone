@@ -16,7 +16,10 @@
   ],
   "author": "Ciranda (https://ciranda.dev)",
   "license": "Apache-2.0",
-  "repository": "github:ciranda-dev/tombstone",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ciranda-dev/tombstone.git"
+  },
   "homepage": "https://github.com/ciranda-dev/tombstone#readme",
   "bugs": "https://github.com/ciranda-dev/tombstone/issues",
   "main": "index.js",
