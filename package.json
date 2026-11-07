@@ -1,0 +1,73 @@
+{
+  "name": "@ciranda/tombstone",
+  "version": "0.1.0",
+  "description": "Delete in a replicated, append-only log: a secret per entry, dropped on delete; tombstones every peer applies alike; the bytes given back to the disk; and a screen without a column of \"Message deleted\"",
+  "keywords": [
+    "delete",
+    "tombstone",
+    "crypto-shredding",
+    "autobase",
+    "hypercore",
+    "corestore",
+    "pear",
+    "p2p",
+    "local-first",
+    "privacy"
+  ],
+  "author": "Ciranda (https://ciranda.dev)",
+  "license": "Apache-2.0",
+  "repository": "github:ciranda-dev/tombstone",
+  "homepage": "https://github.com/ciranda-dev/tombstone#readme",
+  "bugs": "https://github.com/ciranda-dev/tombstone/issues",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "crypto": {
+      "bare": "bare-crypto",
+      "default": "crypto"
+    },
+    "fs": {
+      "bare": "bare-fs",
+      "default": "fs"
+    },
+    "path": {
+      "bare": "bare-path",
+      "default": "path"
+    }
+  },
+  "files": [
+    "index.js",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "npm run test:node && npm run test:bare",
+    "test:node": "brittle-node --coverage test/*.js",
+    "test:bare": "brittle-bare test/*.js",
+    "lint": "prettier --check ."
+  },
+  "dependencies": {
+    "b4a": "^1.9.0",
+    "bare-crypto": "^1.15.4",
+    "bare-fs": "^4.8.4",
+    "bare-path": "^3.1.2",
+    "hypercore-crypto": "^3.7.0"
+  },
+  "devDependencies": {
+    "autobase": "^7.28.2",
+    "autobase-test-helpers": "^3.1.0",
+    "brittle": "^4.5.0",
+    "corestore": "^7.16.1",
+    "hyperbee": "^2.27.3",
+    "prettier": "^3.9.10",
+    "prettier-config-holepunch": "^2.0.0",
+    "test-tmp": "^1.4.0"
+  }
+}
